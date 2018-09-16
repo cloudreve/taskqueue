@@ -2,8 +2,10 @@ package task
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
+	"sync"
+
+	"../api"
 )
 
 //SingleTaskInfo 单个任务
@@ -11,19 +13,23 @@ type SingleTaskInfo struct {
 	ID       int         `json:"id"`
 	TaskName string      `json:"task_name"`
 	Attr     interface{} `json:"attr"`
-	TaskType string      `json:"task"`
+	TaskType string      `json:"type"`
 	Status   string      `json:"status"`
 	Addtime  string      `json:"addtime"`
 }
 
 //Init 初始化任务线程池
-func Init(taskListContent string, apiInfo ApiInfo) {
+func Init(taskListContent string, apiInfo api.ApiInfo) {
 	var taskStringList []SingleTaskInfo
 	err := json.Unmarshal([]byte(taskListContent), &taskStringList)
 	if err != nil {
 		log.Printf("[ERROR] Failed to decode basic infomation,  %v ", err.Error())
 	}
+	var wg sync.WaitGroup
 	for _, v := range taskStringList {
-		fmt.Println(v)
+		signleTask := taskInfo{sqlInfo: v}
+		wg.Add(1)
+		signleTask.Run(&wg)
 	}
+	wg.Wait()
 }

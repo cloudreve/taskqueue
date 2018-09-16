@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 
+	"./api"
 	"./task"
 
 	"gopkg.in/yaml.v2"
@@ -37,12 +38,12 @@ func main() {
 
 	fmt.Println("Cloudreve Queue Go Version")
 	fmt.Println("Author: AaronLiu <abslant@foxmail.com>")
-
+	fmt.Println("")
 	var config taskConfig
 	_, err := config.getConf()
 	if err == nil {
 		log.Printf("[INFO] Config information:  %v ", config)
-		api := task.ApiInfo{TOKEN: config.TOKEN, APIURL: config.APIURL}
+		api := api.ApiInfo{TOKEN: config.TOKEN, APIURL: config.APIURL}
 		basicInfo := api.GetBasicInfo()
 		if basicInfo != "" {
 			log.Printf("[INFO] Basic Info:  %v ", basicInfo)
