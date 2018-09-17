@@ -24,6 +24,11 @@ func (apiInfo *ApiInfo) GetTaskList(num int) string {
 	return apiInfo.apiGet("getList?num=" + strconv.Itoa(num))
 }
 
+//GetPolicy 获取上传策略详情
+func (apiInfo *ApiInfo) GetPolicy(id int) string {
+	return apiInfo.apiGet("getPolicy?id=" + strconv.Itoa(id))
+}
+
 //apiGet 发送GET请求
 func (apiInfo *ApiInfo) apiGet(controller string) string {
 	client := &http.Client{}

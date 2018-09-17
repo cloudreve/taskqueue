@@ -27,7 +27,7 @@ func Init(taskListContent string, apiInfo api.ApiInfo) {
 	}
 	var wg sync.WaitGroup
 	for _, v := range taskStringList {
-		signleTask := taskInfo{sqlInfo: v}
+		signleTask := taskInfo{sqlInfo: v, apiInfo: apiInfo}
 		wg.Add(1)
 		signleTask.Run(&wg)
 	}
