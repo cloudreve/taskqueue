@@ -19,7 +19,7 @@ type SingleTaskInfo struct {
 }
 
 //Init 初始化任务线程池
-func Init(taskListContent string, apiInfo api.ApiInfo) {
+func Init(taskListContent string, apiInfo api.ApiInfo, siteInfo map[string]string) {
 	var taskStringList []SingleTaskInfo
 	err := json.Unmarshal([]byte(taskListContent), &taskStringList)
 	if err != nil {
@@ -27,7 +27,7 @@ func Init(taskListContent string, apiInfo api.ApiInfo) {
 	}
 	var wg sync.WaitGroup
 	for _, v := range taskStringList {
-		signleTask := taskInfo{sqlInfo: v, apiInfo: apiInfo}
+		signleTask := taskInfo{sqlInfo: v, apiInfo: apiInfo, siteInfo: siteInfo}
 		wg.Add(1)
 		signleTask.Run(&wg)
 	}

@@ -3,15 +3,11 @@ package task
 import (
 	"encoding/json"
 	"log"
+	"os"
 	"strconv"
-)
 
-//Task 任务执行接口
-type Task interface {
-	Excute()
-	Init() bool
-	Error() bool
-}
+	"../onedrive"
+)
 
 type oneDriveUploadAttr struct {
 	Fname    string `json:"fname"`
@@ -25,14 +21,51 @@ type oneDriveUploadAttr struct {
 
 //OneDriveUpload OneDrive上传类型Task
 type OneDriveUpload struct {
-	Info  *taskInfo
-	Tried int
-	Attr  oneDriveUploadAttr
+	Info     *taskInfo
+	Tried    int
+	Attr     oneDriveUploadAttr
+	Policy   policy
+	Type     string
+	BasePath string
+}
+
+//OnedriveState OneDrive鉴权状态
+type OnedriveState struct {
+	RedirectURI string `json:"redirect_uri"`
+	Token       struct {
+		Obtained int `json:"obtained"`
+		Data     struct {
+			TokenType    string `json:"token_type"`
+			Scope        string `json:"scope"`
+			ExpiresIn    int    `json:"expires_in"`
+			ExtExpiresIn int    `json:"ext_expires_in"`
+			AccessToken  string `json:"access_token"`
+		} `json:"token"`
+	} `json:"token"`
 }
 
 //Excute 执行Onedrive上传Task
 func (task *OneDriveUpload) Excute() {
+	authState := OnedriveState{}
+	json.Unmarshal([]byte(task.Policy.SK.(string)), &authState)
+	Client := onedrive.Client{
+		ClientID:     task.Policy.BucketName,
+		ClientSecret: task.Policy.AK,
+		AccessToken:  authState.Token.Data.AccessToken,
+	}
+	Client.Init()
+	var filePath string
+	if task.Type == "UploadRegularRemoteDownloadFileToOnedrive" {
 
+	} else {
+		filePath = task.BasePath + "public/uploads/" + task.Attr.SavePath + "/" + task.Attr.Objname
+	}
+	r, err := os.Open(filePath)
+	if err != nil {
+		log.Println("[Error] Failed to open file," + err.Error())
+		task.Error()
+		return
+	}
 }
 
 //Init 执行Onedrive上传Task
@@ -44,7 +77,7 @@ func (task *OneDriveUpload) Init() bool {
 	if task.Attr.Fname == "" {
 		err := json.Unmarshal([]byte(task.Info.sqlInfo.Attr.(string)), &task.Attr)
 		if err != nil {
-			log.Printf("[ERROR] Failed to decode policy infomation,  %v ", err.Error())
+			log.Printf("[ERROR] Failed to decode task infomation,  %v ", err.Error())
 			return task.Error()
 		}
 	}
@@ -54,6 +87,11 @@ func (task *OneDriveUpload) Init() bool {
 		task.Tried++
 		log.Print("[ERROR] Failed to get policy #" + strconv.Itoa(task.Attr.PolicyID) + " Info, retring...")
 		return task.Init()
+	}
+	err := json.Unmarshal([]byte(policyString), &task.Policy)
+	if err != nil {
+		log.Printf("[ERROR] Failed to decode policy infomation,  %v ", err.Error())
+		return task.Error()
 	}
 	return true
 }
