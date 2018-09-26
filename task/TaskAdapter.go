@@ -60,20 +60,32 @@ func (task *OneDriveUpload) Excute() {
 	} else {
 		filePath = task.BasePath + "public/uploads/" + task.Attr.SavePath + "/" + task.Attr.Objname
 	}
+
 	r, err := os.Open(filePath)
+	defer r.Close()
 	if err != nil {
 		log.Println("[Error] Failed to open file," + err.Error())
 		task.Error()
 		return
 	}
+
+	_, errorMsg := Client.PutFile("/me/drive/root:/"+task.Attr.SavePath+"/"+task.Attr.Objname, r)
+	if errorMsg != "" {
+		log.Println("[Error] Unload Failed," + errorMsg)
+	}
+
 }
 
 //Init 执行Onedrive上传Task
 func (task *OneDriveUpload) Init() bool {
+
+	log.SetPrefix("[Task #" + strconv.Itoa(task.Info.sqlInfo.ID) + "]")
+
 	if task.Tried >= 2 {
 		log.Print("[ERROR] Failed to get policy #" + strconv.Itoa(task.Attr.PolicyID) + " Info, abandoned")
 		return task.Error()
 	}
+
 	if task.Attr.Fname == "" {
 		err := json.Unmarshal([]byte(task.Info.sqlInfo.Attr.(string)), &task.Attr)
 		if err != nil {
@@ -81,6 +93,7 @@ func (task *OneDriveUpload) Init() bool {
 			return task.Error()
 		}
 	}
+
 	var policyString string
 	policyString = task.Info.apiInfo.GetPolicy(task.Attr.PolicyID)
 	if policyString == "" {
@@ -88,12 +101,14 @@ func (task *OneDriveUpload) Init() bool {
 		log.Print("[ERROR] Failed to get policy #" + strconv.Itoa(task.Attr.PolicyID) + " Info, retring...")
 		return task.Init()
 	}
+
 	err := json.Unmarshal([]byte(policyString), &task.Policy)
 	if err != nil {
 		log.Printf("[ERROR] Failed to decode policy infomation,  %v ", err.Error())
 		return task.Error()
 	}
 	return true
+
 }
 
 func (task *OneDriveUpload) Error() bool {
