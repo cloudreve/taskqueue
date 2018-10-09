@@ -2,6 +2,7 @@ package task
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -40,7 +41,7 @@ type OnedriveState struct {
 			ExpiresIn    int    `json:"expires_in"`
 			ExtExpiresIn int    `json:"ext_expires_in"`
 			AccessToken  string `json:"access_token"`
-		} `json:"token"`
+		} `json:"data"`
 	} `json:"token"`
 }
 
@@ -52,6 +53,7 @@ func (task *OneDriveUpload) Excute() {
 		ClientID:     task.Policy.BucketName,
 		ClientSecret: task.Policy.AK,
 		AccessToken:  authState.Token.Data.AccessToken,
+		Tried:        0,
 	}
 	Client.Init()
 	var filePath string
@@ -69,10 +71,12 @@ func (task *OneDriveUpload) Excute() {
 		return
 	}
 
-	_, errorMsg := Client.PutFile("/me/drive/root:/"+task.Attr.SavePath+"/"+task.Attr.Objname, r)
+	res, errorMsg := Client.PutFile("/me/drive/root:/"+task.Attr.SavePath+"/"+task.Attr.Objname, r)
 	if errorMsg != "" {
 		log.Println("[Error] Unload Failed," + errorMsg)
+		task.Error()
 	}
+	fmt.Println(res)
 
 }
 

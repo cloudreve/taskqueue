@@ -1,6 +1,9 @@
 package onedrive
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 )
@@ -17,14 +20,24 @@ type Client struct {
 	ClientSecret string
 	AccessToken  string
 	HTTPClient   *http.Client
+	Tried        int
 }
 
-//Response 接口返回内容
+//ErrorResponse 接口返回错误内容
+type ErrorResponse struct {
+	Error errorEntity `json:"error"`
+}
+
+type errorEntity struct {
+	Code       string      `json:"code"`
+	Message    string      `json:"message"`
+	InnerError interface{} `json:"InnerError"`
+}
+
+//Response 接口返回信息
 type Response struct {
-	Code     int
-	Content  string
-	Error    bool
-	ErrorMsg string
+	Success bool
+	Error   ErrorResponse
 }
 
 //Init 初始化客户端
@@ -35,23 +48,57 @@ func (client *Client) Init() bool {
 
 //PutFile 上传新文件
 func (client *Client) PutFile(path string, file *os.File) (string, string) {
-	return client.apiPut(path, file)
+	res := client.apiPut(path, file)
+	if res.Success {
+		fmt.Println("成功")
+		return "", ""
+	}
+	return "", res.Error.Error.Message
 }
 
 //apiPut 发送PUT请求
-func (client *Client) apiPut(path string, stream *os.File) (string, string) {
+func (client *Client) apiPut(path string, stream *os.File) Response {
+	if client.Tried > maxTry {
+		return buildResponseResult("PUT failed, reached the maximum number of attempts.", 0)
+	}
+
 	req, err := http.NewRequest("PUT", APIURL+path, stream)
 	if err != nil {
-		return "", err.Error()
+		return buildResponseResult(err.Error(), 0)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+client.AccessToken)
 
 	res, err := client.HTTPClient.Do(req)
 	if err != nil {
-		return "", err.Error()
+		client.Tried++
+		return client.apiPut(path, stream)
 	}
-	return
 	defer res.Body.Close()
 
+	r, _ := ioutil.ReadAll(res.Body)
+	return client.praseResponse(string(r), res.StatusCode)
+}
+
+func (client *Client) praseResponse(res string, code int) Response {
+	if code != 200 {
+		errorRes := ErrorResponse{}
+		json.Unmarshal([]byte(res), &errorRes)
+		return Response{
+			Success: false,
+			Error:   errorRes,
+		}
+	}
+	return Response{Success: true}
+}
+
+func buildResponseResult(msg string, code int) Response {
+	return Response{
+		Success: false,
+		Error: ErrorResponse{
+			Error: errorEntity{
+				Message: msg,
+			},
+		},
+	}
 }
