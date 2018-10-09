@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -12,6 +13,12 @@ type ApiInfo struct {
 	TOKEN    string
 	APIURL   string
 	BASEPATH string
+}
+
+//APIResponse API响应结果
+type APIResponse struct {
+	Error bool   `json:"error"`
+	Msg   string `json:"msg"`
 }
 
 //GetBasicInfo 获取目标站点基本信息
@@ -27,6 +34,24 @@ func (apiInfo *ApiInfo) GetTaskList(num int) string {
 //GetPolicy 获取上传策略详情
 func (apiInfo *ApiInfo) GetPolicy(id int) string {
 	return apiInfo.apiGet("getPolicy?id=" + strconv.Itoa(id))
+}
+
+//SetSuccess 设置任务完成
+func (apiInfo *ApiInfo) SetSuccess(id int) string {
+	res := APIResponse{}
+	response := apiInfo.apiGet("setSuccess?id=" + strconv.Itoa(id))
+	if response != "" {
+		json.Unmarshal([]byte(response), &res)
+		if res.Error {
+			return res.Msg
+		}
+		return ""
+	}
+	return ""
+}
+
+func (apiInfo *ApiInfo) SetError(id int) string {
+	return apiInfo.apiGet("setError?id=" + strconv.Itoa(id))
 }
 
 //apiGet 发送GET请求

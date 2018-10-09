@@ -2,7 +2,6 @@ package onedrive
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -36,8 +35,9 @@ type errorEntity struct {
 
 //Response 接口返回信息
 type Response struct {
-	Success bool
-	Error   ErrorResponse
+	Success   bool
+	Error     ErrorResponse
+	ResString string
 }
 
 //Init 初始化客户端
@@ -50,8 +50,7 @@ func (client *Client) Init() bool {
 func (client *Client) PutFile(path string, file *os.File) (string, string) {
 	res := client.apiPut(path, file)
 	if res.Success {
-		fmt.Println("成功")
-		return "", ""
+		return res.ResString, ""
 	}
 	return "", res.Error.Error.Message
 }
@@ -89,7 +88,10 @@ func (client *Client) praseResponse(res string, code int) Response {
 			Error:   errorRes,
 		}
 	}
-	return Response{Success: true}
+	return Response{
+		Success:   true,
+		ResString: res,
+	}
 }
 
 func buildResponseResult(msg string, code int) Response {
