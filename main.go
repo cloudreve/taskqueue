@@ -54,7 +54,9 @@ func main() {
 			}
 			for {
 				taskListContent := api.GetTaskList(config.TASKNUM)
-				task.Init(taskListContent, api, siteInfo)
+				if taskListContent != "none" {
+					task.Init(taskListContent, api, siteInfo)
+				}
 				break
 			}
 		}

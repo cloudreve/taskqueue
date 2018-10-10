@@ -1,6 +1,7 @@
 package onedrive
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -40,6 +41,13 @@ type Response struct {
 	ResString string
 }
 
+type uploadSessionResponse struct {
+	DataContxt         string   `json:"@odata.context"`
+	ExpirationDateTime string   `json:"expirationDateTime"`
+	NextExpectedRanges []string `json:"nextExpectedRanges"`
+	UploadURL          string   `json:"uploadUrl"`
+}
+
 //Init 初始化客户端
 func (client *Client) Init() bool {
 	client.HTTPClient = &http.Client{}
@@ -53,6 +61,47 @@ func (client *Client) PutFile(path string, file *os.File) (string, string) {
 		return res.ResString, ""
 	}
 	return "", res.Error.Error.Message
+}
+
+//CreateUploadSession 创建分片上传会话
+func (client *Client) CreateUploadSession(path string) (string, string) {
+	res := client.apiPost(path, []byte(""))
+	if res.Success {
+		response := uploadSessionResponse{}
+		err := json.Unmarshal([]byte(res.ResString), &response)
+		if err != nil {
+			return "", err.Error()
+		}
+		return response.UploadURL, ""
+	}
+
+	return "", res.Error.Error.Message
+}
+
+//apiPost 发送POST请求
+func (client *Client) apiPost(path string, jsonStr []byte) Response {
+	if client.Tried > maxTry {
+		return buildResponseResult("PUT failed, reached the maximum number of attempts.", 0)
+	}
+
+	req, err := http.NewRequest("POST", APIURL+path, bytes.NewBuffer(jsonStr))
+	if err != nil {
+		return buildResponseResult(err.Error(), 0)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+client.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := client.HTTPClient.Do(req)
+	if err != nil {
+		client.Tried++
+		return client.apiPost(path, jsonStr)
+	}
+	defer res.Body.Close()
+
+	r, _ := ioutil.ReadAll(res.Body)
+	return client.praseResponse(string(r), res.StatusCode)
+
 }
 
 //apiPut 发送PUT请求
@@ -80,7 +129,7 @@ func (client *Client) apiPut(path string, stream *os.File) Response {
 }
 
 func (client *Client) praseResponse(res string, code int) Response {
-	if code != 200 {
+	if code != 200 && code != 202 {
 		errorRes := ErrorResponse{}
 		json.Unmarshal([]byte(res), &errorRes)
 		return Response{

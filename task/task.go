@@ -52,6 +52,14 @@ func (task *taskInfo) Run(wg *sync.WaitGroup) {
 			BasePath: task.siteInfo["basePath"],
 		}
 		newTask.Init()
+	case task.sqlInfo.TaskType == "uploadChunksToOnedrive":
+		newTask = &OneDriveUpload{
+			Info:     task,
+			Tried:    0,
+			Type:     task.sqlInfo.TaskType,
+			BasePath: task.siteInfo["basePath"],
+		}
+		newTask.Init()
 	}
 	newTask.Excute()
 	wg.Done()

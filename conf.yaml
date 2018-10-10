@@ -1,3 +1,4 @@
 token: 52121225
 api: http://127.0.0.1/Queue
 taskNum: 4
+threadNum: 4
