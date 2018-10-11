@@ -3,9 +3,11 @@ package onedrive
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
 )
 
 //APIURL Graph API URL
@@ -78,6 +80,50 @@ func (client *Client) CreateUploadSession(path string) (string, string) {
 	return "", res.Error.Error.Message
 }
 
+//UploadChunk 上传文件片
+func (client *Client) UploadChunk(url string, from int, to int, total int, stream *os.File) (string, string) {
+	headers := make(map[string]string)
+	headers["Content-Length"] = strconv.Itoa(to - from + 1)
+	headers["Content-Range"] = fmt.Sprintf("bytes %d-%d/%d", from, to, total)
+	res := client.apiChunkPut(url, stream, headers)
+	if res.Success {
+		return res.ResString, ""
+	}
+	return "", res.Error.Error.Message
+}
+
+//apiChunkPut 发送分片PUT请求
+func (client *Client) apiChunkPut(url string, stream *os.File, headers map[string]string) Response {
+	if client.Tried > maxTry {
+		return buildResponseResult("PUT failed, reached the maximum number of attempts.", 0)
+	}
+
+	req, err := http.NewRequest("PUT", url, stream)
+	if err != nil {
+		return buildResponseResult(err.Error(), 0)
+	}
+
+	for k, v := range headers {
+		if k == "Content-Length" {
+			req.ContentLength, _ = strconv.ParseInt(v, 10, 64)
+		} else {
+			req.Header.Set(k, v)
+		}
+
+	}
+	req.Header.Set("Authorization", "Bearer "+client.AccessToken)
+
+	res, err := client.HTTPClient.Do(req)
+	if err != nil {
+		client.Tried++
+		return client.apiChunkPut(url, stream, headers)
+	}
+	defer res.Body.Close()
+
+	r, _ := ioutil.ReadAll(res.Body)
+	return client.praseResponse(string(r), res.StatusCode)
+}
+
 //apiPost 发送POST请求
 func (client *Client) apiPost(path string, jsonStr []byte) Response {
 	if client.Tried > maxTry {
@@ -97,6 +143,9 @@ func (client *Client) apiPost(path string, jsonStr []byte) Response {
 		client.Tried++
 		return client.apiPost(path, jsonStr)
 	}
+
+	client.Tried = 0
+
 	defer res.Body.Close()
 
 	r, _ := ioutil.ReadAll(res.Body)

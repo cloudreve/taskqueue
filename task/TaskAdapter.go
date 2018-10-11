@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"sync"
 
 	"../onedrive"
 )
@@ -95,7 +94,6 @@ func (task *OneDriveUpload) uploadChunks(Client *onedrive.Client) {
 		task.Error()
 		return
 	}
-	fmt.Println(url)
 
 	chunkList, chunkErr := task.buildChunks()
 	if chunkErr != "" {
@@ -103,38 +101,51 @@ func (task *OneDriveUpload) uploadChunks(Client *onedrive.Client) {
 		task.Error()
 		return
 	}
-
-	var wg sync.WaitGroup
-	ch := make(chan Chunk)
-	isFailed := false
-
-	for index := 0; index < uploadThreadNum; index++ {
-		wg.Add(1)
-		go task.uploadSingleChunk(&wg, ch, &isFailed)
-	}
-
+	uploaded := 0
 	for _, v := range chunkList {
-		if isFailed {
-			close(ch)
-			break
+		if task.uploadSingleChunk(v, Client, url) {
+			uploaded += (v.To - v.From + 1)
+			task.Log(fmt.Sprintf("[Info] Chunk uploaded, From:%d To:%d Total:%d Complete:%.2f", v.From, v.To, task.Attr.Fsize, float32(uploaded)/float32(task.Attr.Fsize)))
+		} else {
+			//to-do:关闭上传Session
+
+			return
 		}
-		ch <- v
 	}
-	close(ch)
-	wg.Wait()
+
+	addRes := task.Info.apiInfo.SetSuccess(task.Info.sqlInfo.ID)
+
+	if addRes != "" {
+		task.Log("[Error] " + addRes)
+	}
 
 }
 
-func (task *OneDriveUpload) uploadSingleChunk(wg *sync.WaitGroup, ch chan Chunk, isFailed *bool) {
-	for {
-		chunk, opened := <-ch
-		if !opened {
-			fmt.Println("quit")
-			wg.Done()
-			return
-		}
-		fmt.Println(chunk.From)
+func (task *OneDriveUpload) uploadSingleChunk(chunk Chunk, Client *onedrive.Client, url string) bool {
+
+	var r *os.File
+	var err error
+	if chunk.Type == 0 {
+		r, err = os.Open(chunk.ChunkPath)
+	} else {
+		r, err = os.Open(chunk.ChunkPath)
 	}
+
+	if err != nil {
+		task.Log("[Error] Failed to open file," + err.Error())
+		task.Error()
+		return false
+	}
+
+	res, uploadErr := Client.UploadChunk(url, chunk.From, chunk.To, int(task.Attr.Fsize), r)
+	if uploadErr != "" {
+		task.Log("[Error] Failed to upload chunk," + uploadErr)
+		task.Error()
+		return false
+	}
+	fmt.Println(res)
+	r.Close()
+	return true
 }
 
 func (task *OneDriveUpload) buildChunks() ([]Chunk, string) {
