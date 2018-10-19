@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"sync"
+	"time"
 
 	"./api"
 	"./task"
@@ -14,9 +16,10 @@ import (
 )
 
 type taskConfig struct {
-	TOKEN   string `yaml:"token"`
-	APIURL  string `yaml:"api"`
-	TASKNUM int    `yaml:"taskNum"`
+	TOKEN    string `yaml:"token"`
+	APIURL   string `yaml:"api"`
+	TASKNUM  int    `yaml:"taskNum"`
+	DURATION int    `yaml:"Duration"`
 }
 
 func (c *taskConfig) getConf() (*taskConfig, error) {
@@ -42,23 +45,48 @@ func main() {
 	var config taskConfig
 	_, err := config.getConf()
 	if err == nil {
+
 		log.Printf("[INFO] Config information:  %v ", config)
-		api := api.ApiInfo{TOKEN: config.TOKEN, APIURL: config.APIURL}
+		api := api.ApiInfo{
+			TOKEN:  config.TOKEN,
+			APIURL: config.APIURL,
+			Lock:   new(sync.Mutex),
+		}
 		basicInfo := api.GetBasicInfo()
+
 		if basicInfo != "" {
+
 			log.Printf("[INFO] Basic Info:  %v ", basicInfo)
 			var siteInfo map[string]string
 			err := json.Unmarshal([]byte(basicInfo), &siteInfo)
 			if err != nil {
 				log.Printf("[ERROR] Failed to decode basic infomation,  %v ", err.Error())
 			}
-			for {
-				taskListContent := api.GetTaskList(config.TASKNUM)
-				if taskListContent != "none" {
-					task.Init(taskListContent, api, siteInfo)
-				}
-				break
+
+			var wg sync.WaitGroup
+			for i := 0; i < config.TASKNUM; i++ {
+				wg.Add(1)
+				log.Printf("[Info] Thread %d start", i+1)
+				threadID := i
+				go func() {
+					for {
+
+						api.Lock.Lock()
+						taskListContent := api.GetTaskList(1)
+						api.Lock.Unlock()
+
+						if taskListContent != "none" {
+							task.Init(taskListContent, api, siteInfo, threadID)
+						}
+						time.Sleep(time.Duration(config.DURATION) * time.Second)
+					}
+
+				}()
+				time.Sleep(time.Duration(1) * time.Second)
 			}
+
+			wg.Wait()
+
 		}
 
 	}

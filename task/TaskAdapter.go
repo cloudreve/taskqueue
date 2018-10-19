@@ -107,8 +107,7 @@ func (task *OneDriveUpload) uploadChunks(Client *onedrive.Client) {
 			uploaded += (v.To - v.From + 1)
 			task.Log(fmt.Sprintf("[Info] Chunk uploaded, From:%d To:%d Total:%d Complete:%.2f", v.From, v.To, task.Attr.Fsize, float32(uploaded)/float32(task.Attr.Fsize)))
 		} else {
-			//to-do:关闭上传Session
-
+			task.Info.apiInfo.CancelUploadSession(url)
 			return
 		}
 	}
@@ -137,13 +136,12 @@ func (task *OneDriveUpload) uploadSingleChunk(chunk Chunk, Client *onedrive.Clie
 		return false
 	}
 
-	res, uploadErr := Client.UploadChunk(url, chunk.From, chunk.To, int(task.Attr.Fsize), r)
+	_, uploadErr := Client.UploadChunk(url, chunk.From, chunk.To, int(task.Attr.Fsize), r)
 	if uploadErr != "" {
 		task.Log("[Error] Failed to upload chunk," + uploadErr)
 		task.Error()
 		return false
 	}
-	fmt.Println(res)
 	r.Close()
 	return true
 }

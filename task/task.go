@@ -1,8 +1,6 @@
 package task
 
 import (
-	"sync"
-
 	"../api"
 )
 
@@ -41,7 +39,7 @@ type Task interface {
 }
 
 //Run 根据任务类型处理任务
-func (task *taskInfo) Run(wg *sync.WaitGroup) {
+func (task *taskInfo) Run() {
 	var newTask Task
 	switch {
 	case task.sqlInfo.TaskType == "uploadSingleToOnedrive":
@@ -62,5 +60,4 @@ func (task *taskInfo) Run(wg *sync.WaitGroup) {
 		newTask.Init()
 	}
 	newTask.Excute()
-	wg.Done()
 }

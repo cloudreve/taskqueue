@@ -3,7 +3,6 @@ package task
 import (
 	"encoding/json"
 	"log"
-	"sync"
 
 	"../api"
 )
@@ -19,19 +18,16 @@ type SingleTaskInfo struct {
 }
 
 //Init 初始化任务线程池
-func Init(taskListContent string, apiInfo api.ApiInfo, siteInfo map[string]string) {
+func Init(taskListContent string, apiInfo api.ApiInfo, siteInfo map[string]string, threadID int) {
 	var taskStringList []SingleTaskInfo
 	err := json.Unmarshal([]byte(taskListContent), &taskStringList)
 	if err != nil {
 		log.Printf("[ERROR] Failed to decode basic infomation,  %v ", err.Error())
 	}
-	var wg sync.WaitGroup
 	for _, v := range taskStringList {
-		wg.Add(1)
+		log.Printf("[Info][Thread %d] New task: %s", threadID, v.TaskName)
 		signleTask := taskInfo{sqlInfo: v, apiInfo: apiInfo, siteInfo: siteInfo}
-		go func(t taskInfo) {
-			t.Run(&wg)
-		}(signleTask)
+		signleTask.Run()
+
 	}
-	wg.Wait()
 }
