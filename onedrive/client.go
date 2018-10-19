@@ -1,6 +1,7 @@
 package onedrive
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -81,11 +82,21 @@ func (client *Client) CreateUploadSession(path string) (string, string) {
 }
 
 //UploadChunk 上传文件片
-func (client *Client) UploadChunk(url string, from int, to int, total int, stream *os.File) (string, string) {
+func (client *Client) UploadChunk(url string, from int, to int, total int, stream *os.File, reader *bufio.Reader) (string, string) {
 	headers := make(map[string]string)
 	headers["Content-Length"] = strconv.Itoa(to - from + 1)
 	headers["Content-Range"] = fmt.Sprintf("bytes %d-%d/%d", from, to, total)
-	res := client.apiChunkPut(url, stream, headers)
+	var res Response
+	if reader == nil {
+		res = client.apiChunkPut(url, stream, headers, nil)
+	} else {
+		buf := make([]byte, to-from+1)
+		_, err := reader.Read(buf)
+		if err != nil {
+			return "", err.Error()
+		}
+		res = client.apiChunkPut(url, stream, headers, &buf)
+	}
 	if res.Success {
 		return res.ResString, ""
 	}
@@ -93,12 +104,20 @@ func (client *Client) UploadChunk(url string, from int, to int, total int, strea
 }
 
 //apiChunkPut 发送分片PUT请求
-func (client *Client) apiChunkPut(url string, stream *os.File, headers map[string]string) Response {
+func (client *Client) apiChunkPut(url string, stream *os.File, headers map[string]string, data *[]byte) Response {
 	if client.Tried > maxTry {
 		return buildResponseResult("PUT failed, reached the maximum number of attempts.", 0)
 	}
+	var (
+		req *http.Request
+		err error
+	)
+	if data == nil {
+		req, err = http.NewRequest("PUT", url, stream)
+	} else {
+		req, err = http.NewRequest("PUT", url, bytes.NewReader(*data))
+	}
 
-	req, err := http.NewRequest("PUT", url, stream)
 	if err != nil {
 		return buildResponseResult(err.Error(), 0)
 	}
@@ -116,7 +135,7 @@ func (client *Client) apiChunkPut(url string, stream *os.File, headers map[strin
 	res, err := client.HTTPClient.Do(req)
 	if err != nil {
 		client.Tried++
-		return client.apiChunkPut(url, stream, headers)
+		return client.apiChunkPut(url, stream, headers, data)
 	}
 	defer res.Body.Close()
 

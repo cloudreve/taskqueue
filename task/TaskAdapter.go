@@ -1,6 +1,7 @@
 package task
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -11,6 +12,7 @@ import (
 )
 
 const uploadThreadNum int = 4
+const aria2ChunkSize int = 10 * 1024 * 1024
 
 type chunkFile struct {
 	ID      int    `json:"id"`
@@ -23,14 +25,15 @@ type chunkFile struct {
 }
 
 type oneDriveUploadAttr struct {
-	Fname    string      `json:"fname"`
-	Path     string      `json:"path"`
-	Objname  string      `json:"objname"`
-	SavePath string      `json:"savePath"`
-	Fsize    uint64      `json:"fsize"`
-	PicInfo  string      `json:"picInfo"`
-	PolicyID int         `json:"policyId"`
-	Chunks   []chunkFile `json:"chunks"`
+	Fname      string      `json:"fname"`
+	Path       string      `json:"path"`
+	Objname    string      `json:"objname"`
+	SavePath   string      `json:"savePath"`
+	Fsize      uint64      `json:"fsize"`
+	PicInfo    string      `json:"picInfo"`
+	PolicyID   int         `json:"policyId"`
+	Chunks     []chunkFile `json:"chunks"`
+	OriginPath string      `json:"originPath"`
 }
 
 //OneDriveUpload OneDrive上传类型Task
@@ -78,9 +81,9 @@ func (task *OneDriveUpload) Excute() {
 	}
 	Client.Init()
 
-	if task.Type == "uploadSingleToOnedrive" {
+	if task.Type == "uploadSingleToOnedrive" || task.Type == "UploadRegularRemoteDownloadFileToOnedrive" {
 		task.uploadRegularFile(&Client)
-	} else if task.Type == "uploadChunksToOnedrive" {
+	} else if task.Type == "uploadChunksToOnedrive" || task.Type == "UploadLargeRemoteDownloadFileToOnedrive" {
 		task.uploadChunks(&Client)
 	}
 
@@ -124,10 +127,14 @@ func (task *OneDriveUpload) uploadSingleChunk(chunk Chunk, Client *onedrive.Clie
 
 	var r *os.File
 	var err error
+	var bfRd *bufio.Reader
 	if chunk.Type == 0 {
 		r, err = os.Open(chunk.ChunkPath)
+		bfRd = nil
 	} else {
 		r, err = os.Open(chunk.ChunkPath)
+		r.Seek(int64(chunk.From), 0)
+		bfRd = bufio.NewReader(r)
 	}
 
 	if err != nil {
@@ -135,8 +142,13 @@ func (task *OneDriveUpload) uploadSingleChunk(chunk Chunk, Client *onedrive.Clie
 		task.Error()
 		return false
 	}
+	var uploadErr string
+	if bfRd == nil {
+		_, uploadErr = Client.UploadChunk(url, chunk.From, chunk.To, int(task.Attr.Fsize), r, nil)
+	} else {
+		_, uploadErr = Client.UploadChunk(url, chunk.From, chunk.To, int(task.Attr.Fsize), r, bfRd)
+	}
 
-	_, uploadErr := Client.UploadChunk(url, chunk.From, chunk.To, int(task.Attr.Fsize), r)
 	if uploadErr != "" {
 		task.Log("[Error] Failed to upload chunk," + uploadErr)
 		task.Error()
@@ -158,23 +170,62 @@ func (task *OneDriveUpload) buildChunks() ([]Chunk, string) {
 	var chunkList []Chunk
 	var offset int
 
-	for _, v := range task.Attr.Chunks {
+	if chunkType == 0 {
 
-		chunkPath := task.BasePath + "public/uploads/chunks/" + v.ObjName + ".chunk"
+		for _, v := range task.Attr.Chunks {
 
-		fileInfo, err := os.Stat(chunkPath)
-		if os.IsNotExist(err) {
-			return chunkList, "Chunk file " + chunkPath + " not exist"
+			var (
+				chunkPath string
+				chunkSize int
+			)
+			chunkPath = task.BasePath + "public/uploads/chunks/" + v.ObjName + ".chunk"
+
+			fileInfo, err := os.Stat(chunkPath)
+			if os.IsNotExist(err) {
+				return chunkList, "Chunk file " + chunkPath + " not exist"
+			}
+			chunkSize = int(fileInfo.Size())
+
+			chunkList = append(chunkList, Chunk{
+				Type:      chunkType,
+				From:      offset,
+				To:        offset + chunkSize - 1,
+				ChunkPath: chunkPath,
+			})
+
+			offset += chunkSize
 		}
-		chunkSize := int(fileInfo.Size())
 
-		chunkList = append(chunkList, Chunk{
-			Type:      chunkType,
-			From:      offset,
-			To:        offset + chunkSize - 1,
-			ChunkPath: chunkPath,
-		})
-		offset += chunkSize
+	} else {
+		for {
+
+			var (
+				chunkPath string
+				chunkSize int
+			)
+
+			chunkPath = task.Attr.OriginPath
+			if uint64(offset+aria2ChunkSize) > task.Attr.Fsize {
+				chunkSize = int(task.Attr.Fsize) - offset
+			} else {
+				chunkSize = aria2ChunkSize
+			}
+
+			chunkList = append(chunkList, Chunk{
+				Type:      chunkType,
+				From:      offset,
+				To:        offset + chunkSize - 1,
+				ChunkPath: chunkPath,
+			})
+
+			offset += chunkSize
+
+			if offset >= int(task.Attr.Fsize) {
+				break
+			}
+
+		}
+
 	}
 
 	return chunkList, ""
@@ -183,7 +234,12 @@ func (task *OneDriveUpload) buildChunks() ([]Chunk, string) {
 
 func (task *OneDriveUpload) uploadRegularFile(Client *onedrive.Client) {
 	var filePath string
-	filePath = task.BasePath + "public/uploads/" + task.Attr.SavePath + "/" + task.Attr.Objname
+	if task.Type == "UploadRegularRemoteDownloadFileToOnedrive" {
+		filePath = task.Attr.OriginPath
+	} else {
+		filePath = task.BasePath + "public/uploads/" + task.Attr.SavePath + "/" + task.Attr.Objname
+	}
+
 	r, err := os.Open(filePath)
 	defer r.Close()
 	if err != nil {

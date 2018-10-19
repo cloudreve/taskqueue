@@ -58,6 +58,22 @@ func (task *taskInfo) Run() {
 			BasePath: task.siteInfo["basePath"],
 		}
 		newTask.Init()
+	case task.sqlInfo.TaskType == "UploadRegularRemoteDownloadFileToOnedrive":
+		newTask = &OneDriveUpload{
+			Info:     task,
+			Tried:    0,
+			Type:     task.sqlInfo.TaskType,
+			BasePath: task.siteInfo["basePath"],
+		}
+		newTask.Init()
+	case task.sqlInfo.TaskType == "UploadLargeRemoteDownloadFileToOnedrive":
+		newTask = &OneDriveUpload{
+			Info:     task,
+			Tried:    0,
+			Type:     task.sqlInfo.TaskType,
+			BasePath: task.siteInfo["basePath"],
+		}
+		newTask.Init()
 	}
 	newTask.Excute()
 }
