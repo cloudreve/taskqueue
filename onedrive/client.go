@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 //APIURL Graph API URL
@@ -175,6 +177,7 @@ func (client *Client) apiPost(path string, jsonStr []byte) Response {
 //apiPut 发送PUT请求
 func (client *Client) apiPut(path string, stream *os.File) Response {
 	if client.Tried > maxTry {
+
 		return buildResponseResult("PUT failed, reached the maximum number of attempts.", 0)
 	}
 
@@ -188,6 +191,8 @@ func (client *Client) apiPut(path string, stream *os.File) Response {
 	res, err := client.HTTPClient.Do(req)
 	if err != nil {
 		client.Tried++
+		log.Println("PUT failed, retrying...")
+		time.Sleep(time.Duration(5*client.Tried*client.Tried) * time.Second)
 		return client.apiPut(path, stream)
 	}
 	defer res.Body.Close()

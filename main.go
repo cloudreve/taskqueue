@@ -39,7 +39,7 @@ func (c *taskConfig) getConf() (*taskConfig, error) {
 
 func main() {
 
-	fmt.Println("Cloudreve Queue Go Version")
+	fmt.Println("Cloudreve Queue Go Version 1.0")
 	fmt.Println("Author: AaronLiu <abslant@foxmail.com>")
 	fmt.Println("")
 	var config taskConfig
